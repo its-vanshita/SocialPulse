@@ -40,7 +40,7 @@ The system is designed to be **scalable**, allowing integration of additional e-
 
 ---
 
-## Getting Started
+### Getting Started
 
 ### Prerequisites
 - Python 3.8 or higher  
