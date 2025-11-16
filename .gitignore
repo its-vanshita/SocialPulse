@@ -1,3 +1,23 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.env
+.venv/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+
+# Streamlit secrets (do not commit real keys)
+.streamlit/secrets.toml
+
+# macOS
+.DS_Store
+
+# Data (optional – keep small samples instead)
+split_reviews_amazon/
+split_reviews_flipkart/
 # Environment variables
 .env
 
