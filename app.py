@@ -11,44 +11,105 @@ from functools import lru_cache
 import re
 import numpy as np
 
+# -------------------------
+# Configurable Category Profiles
+# -------------------------
+# Each profile defines: aspects, aspect_display, and optional intent/emotion rules
+CATEGORY_PROFILES = {
+    'Electronics': {
+        'aspects': [
+            'delivery', 'service', 'price', 'quality', 'packaging', 'usability',
+            'performance', 'warranty', 'return_policy', 'durability', 'availability',
+            'support', 'features', 'design', 'charging'
+        ],
+        'aspect_display': {
+            'delivery': 'Delivery',
+            'service': 'Customer Service',
+            'price': 'Price',
+            'quality': 'Product Quality',
+            'packaging': 'Packaging',
+            'usability': 'Ease of Use',
+            'performance': 'Performance',
+            'warranty': 'Warranty',
+            'return_policy': 'Return/Refund Policy',
+            'durability': 'Durability',
+            'availability': 'Availability',
+            'support': 'Technical Support',
+            'features': 'Features',
+            'design': 'Design & Look',
+            'charging': 'Charging/Battery'
+        }
+    },
+    'Fashion': {
+        'aspects': [
+            'delivery', 'service', 'price', 'quality', 'packaging', 'availability',
+            'return_policy', 'design', 'comfort', 'fit', 'material', 'color',
+            'stitching', 'size', 'washing', 'durability'
+        ],
+        'aspect_display': {
+            'delivery': 'Delivery',
+            'service': 'Customer Service',
+            'price': 'Price',
+            'quality': 'Fabric Quality',
+            'packaging': 'Packaging',
+            'availability': 'Availability/Stock',
+            'return_policy': 'Return/Exchange Policy',
+            'design': 'Design/Style',
+            'comfort': 'Comfort',
+            'fit': 'Fit',
+            'material': 'Material',
+            'color': 'Color',
+            'stitching': 'Stitching',
+            'size': 'Size Accuracy',
+            'washing': 'Washing/Care',
+            'durability': 'Durability'
+        }
+    }
+}
+
+# Generic, lightweight rules for intents and emotions (can be overridden per profile)
+INTENT_RULES_DEFAULT = {
+    'praise': [r"\blove\b", r"\bamazing\b", r"\bgreat\b", r"\bexcellent\b", r"\bhappy\b", r"\bsatisfied\b"],
+    'complaint': [r"\bnot working\b", r"\bworst\b", r"\bbroken\b", r"\blate\b", r"\bdelay(ed)?\b", r"\brefund\b", r"\breturn\b", r"\bdisappoint(ed)?\b"],
+    'inquiry': [r"\bhow\b", r"\bwhen\b", r"\bwhere\b", r"\bwhat\b", r"\bdoes it\b", r"\bcan i\b", r"\bis it\b"],
+    'feature_request': [r"\bplease add\b", r"\bwish it had\b", r"\bfeature request\b"],
+    'purchase_intent': [r"\bwill buy\b", r"\border(ing)?\b", r"\badd(ed)? to cart\b", r"\bthinking to buy\b"],
+    'return_refund': [r"\brefund\b", r"\breturn\b", r"\breplacement\b"],
+    'support_needed': [r"\bhelp\b", r"\bsupport\b", r"\bassist\b", r"\bcontact\b"],
+    'comparison': [r"\bbetter than\b", r"\bworse than\b", r"\bvs\b", r"\bcompared to\b"]
+}
+
+EMOTION_RULES_DEFAULT = {
+    'joy': [r"\blove\b", r"\bhappy\b", r"\bdelight(ed)?\b", r"\bpleased\b"],
+    'anger': [r"\bangry\b", r"\bfurious\b", r"\bwaste\b", r"\bterrible\b"],
+    'sadness': [r"\bsad\b", r"\bdisappoint(ed)?\b", r"\bupset\b"],
+    'surprise': [r"\bsurpris(ed|ing)\b", r"\bdidn'?t expect\b"]
+}
+
+# Optional: profile-specific overrides can be added under CATEGORY_PROFILES[profile]['intent_rules'/'emotion_rules']
+
+# -------------------------
+# Rule Helpers
+# -------------------------
+def _compile_rules(rules_dict):
+    compiled = {}
+    for tag, patterns in rules_dict.items():
+        compiled[tag] = [re.compile(p, flags=re.IGNORECASE) for p in patterns]
+    return compiled
+
+def detect_tags_from_text(text, compiled_rules):
+    text = str(text)
+    detected = []
+    for tag, patterns in compiled_rules.items():
+        if any(p.search(text) for p in patterns):
+            detected.append(tag)
+    return detected
+
 # Initialize analyzers
 analyzer = SentimentIntensityAnalyzer()
 translator = Translator()
-aspects = [
-    'delivery',
-    'service',
-    'price',
-    'quality',
-    'packaging',
-    'usability',
-    'performance',
-    'warranty',
-    'return_policy',
-    'durability',
-    'availability',
-    'support',
-    'features',
-    'design',
-    'charging',
-]
-
-aspect_display = {
-    'delivery': 'Delivery',
-    'service': 'Customer Service',
-    'price': 'Price',
-    'quality': 'Product Quality',
-    'packaging': 'Packaging',
-    'usability': 'Ease of Use',
-    'performance': 'Performance',
-    'warranty': 'Warranty',
-    'return_policy': 'Return/Refund Policy',
-    'durability': 'Durability',
-    'availability': 'Availability',
-    'support': 'Technical Support',
-    'features': 'Features',
-    'design': 'Design & Look',
-    'charging': 'Charging/Battery',
-}
+aspects = CATEGORY_PROFILES['Electronics']['aspects']
+aspect_display = CATEGORY_PROFILES['Electronics']['aspect_display']
 
 
 # -------------------------
@@ -106,6 +167,30 @@ st.set_page_config(page_title="Sentiment Analyzer", layout="wide")
 st.title("🧠 Product Review Sentiment Analyzer")
 
 # -------------------------
+# Category/Profile Selection
+# -------------------------
+st.sidebar.markdown("### Category Profile")
+selected_profile_name = st.sidebar.selectbox(
+    "Select a category profile",
+    list(CATEGORY_PROFILES.keys()),
+    index=0
+)
+
+# Apply selected profile
+profile = CATEGORY_PROFILES[selected_profile_name]
+aspects = profile['aspects']
+aspect_display = profile['aspect_display']
+
+# Optional: quick custom aspect override per client (comma-separated)
+custom_aspects_csv = st.sidebar.text_input("Custom aspects (comma-separated)", value="")
+if custom_aspects_csv.strip():
+    custom_aspect_list = [a.strip().lower() for a in custom_aspects_csv.split(',') if a.strip()]
+    if custom_aspect_list:
+        aspects = custom_aspect_list
+        # Try to preserve display names from profile when possible
+        aspect_display = {a: profile['aspect_display'].get(a, a.title()) for a in aspects}
+
+# -------------------------
 # 1. Single Text Analysis
 # -------------------------
 with st.expander('🔍 Single Text Analysis'):
@@ -121,8 +206,16 @@ with st.expander('🔍 Single Text Analysis'):
         sentiment = analyze_vader_sentiment(score)
         st.write('📊 Sentiment:', sentiment)
         st.write('📊 VADER Score:', round(score, 2))
+        # Compile rules based on selected profile
+        intent_rules = _compile_rules(profile.get('intent_rules', INTENT_RULES_DEFAULT))
+        emotion_rules = _compile_rules(profile.get('emotion_rules', EMOTION_RULES_DEFAULT))
+
         aspect_mentions = {aspect_display.get(aspect, aspect.title()): (aspect in english_text.lower()) for aspect in aspects}
+        intents = detect_tags_from_text(english_text, intent_rules)
+        emotions = detect_tags_from_text(english_text, emotion_rules)
         st.write('🔎 Aspect Mentions:', aspect_mentions)
+        st.write('🎯 Intents:', intents or ['none'])
+        st.write('💬 Emotions:', emotions or ['none'])
 
     pre = st.text_input('Clean the text:')
     if pre:
@@ -178,6 +271,12 @@ if uploaded_file:
             col_name = aspect + '_mention'
             df[col_name] = df['Review_Summary_English'].str.lower().str.contains(aspect)
 
+        # Intent & Emotion tagging
+        intent_rules = _compile_rules(profile.get('intent_rules', INTENT_RULES_DEFAULT))
+        emotion_rules = _compile_rules(profile.get('emotion_rules', EMOTION_RULES_DEFAULT))
+        df['intents'] = df['Review_Summary_English'].apply(lambda t: detect_tags_from_text(t, intent_rules))
+        df['emotions'] = df['Review_Summary_English'].apply(lambda t: detect_tags_from_text(t, emotion_rules))
+
         st.sidebar.title("📊 Filters")
         min_rating, max_rating = int(df['Rating'].min()), int(df['Rating'].max())
         selected_range = st.sidebar.slider("Select Rating Range", min_rating, max_rating, (min_rating, max_rating))
@@ -222,6 +321,35 @@ if uploaded_file:
                 ax.axis('equal')
                 st.pyplot(fig)
       
+        # -------------------------
+        # Intent & Emotion Summaries
+        # -------------------------
+        st.subheader("🎯 Intent & 💬 Emotion Summaries")
+        col3, col4 = st.columns(2)
+        with col3:
+            # explode intents
+            intents_exploded = df.explode('intents')
+            intents_exploded['intents'] = intents_exploded['intents'].fillna('none')
+            intent_counts = intents_exploded['intents'].value_counts().reset_index()
+            intent_counts.columns = ['Intent', 'Count']
+            chart_i = alt.Chart(intent_counts).mark_bar().encode(
+                x=alt.X('Intent', sort='-y'),
+                y='Count',
+                tooltip=['Intent', 'Count']
+            ).properties(width='container', height=300)
+            st.altair_chart(chart_i, use_container_width=True)
+        with col4:
+            emotions_exploded = df.explode('emotions')
+            emotions_exploded['emotions'] = emotions_exploded['emotions'].fillna('none')
+            emotion_counts = emotions_exploded['emotions'].value_counts().reset_index()
+            emotion_counts.columns = ['Emotion', 'Count']
+            chart_e = alt.Chart(emotion_counts).mark_bar().encode(
+                x=alt.X('Emotion', sort='-y'),
+                y='Count',
+                tooltip=['Emotion', 'Count']
+            ).properties(width='container', height=300)
+            st.altair_chart(chart_e, use_container_width=True)
+
         # -------------------------
         # Aspect Breakdown (Counts)
         # -------------------------
@@ -278,14 +406,14 @@ if uploaded_file:
         # Simple AI-like recommendation logic
         improvement_threshold = 40  # you can adjust this
         if weakest_aspect['Negative (%)'] > improvement_threshold:
-            suggestion = (f"⚠️ **Improvement Needed:** Customers are most dissatisfied with **{weakest_aspect['Aspect']}** "
+            suggestion = (f"⚠ *Improvement Needed:* Customers are most dissatisfied with *{weakest_aspect['Aspect']}* "
                         f"({weakest_aspect['Negative (%)']}% negative sentiment). "
                         f"Consider addressing issues related to this aspect.")
         else:
-            suggestion = (f"👍 **Overall Positive:** No single aspect stands out as highly negative. "
+            suggestion = (f"👍 *Overall Positive:* No single aspect stands out as highly negative. "
                         f"Continue monitoring for trends.")
 
-        strength = (f"🌟 **Strength:** Customers are happiest with **{strongest_aspect['Aspect']}** "
+        strength = (f"🌟 *Strength:* Customers are happiest with *{strongest_aspect['Aspect']}* "
                     f"({strongest_aspect['Positive (%)']}% positive sentiment). "
                     f"Leverage this in your marketing and maintain quality.")
 
@@ -294,30 +422,11 @@ if uploaded_file:
         st.write(suggestion)
         st.write(strength)
 
-        # # -------------------------
-        # # Word Cloud (with stopwords and product names)
-        # # -------------------------
-        # st.subheader("☁️ Word Cloud of All Reviews")
-        # stopwords = set(STOPWORDS)
-        # if 'ProductName' in df.columns:
-        #     prod_names = df['ProductName'].astype(str).str.lower().unique()
-        #     stopwords.update(prod_names)
-        # all_text = " ".join(df['Review_Summary_English'].astype(str).tolist())
-        # wordcloud = WordCloud(
-        #     width=800,
-        #     height=400,
-        #     background_color='white',
-        #     stopwords=stopwords
-        # ).generate(all_text)
-        # fig_wc, ax_wc = plt.subplots(figsize=(12, 6))
-        # ax_wc.imshow(wordcloud, interpolation='bilinear')
-        # ax_wc.axis('off')
-        # st.pyplot(fig_wc)
-
+      
         # -------------------------
         # Download Results
         # -------------------------
-        st.subheader("⬇️ Download Sentiment CSV")
+        st.subheader("⬇ Download Sentiment CSV")
         csv = convert_df(df)
         st.download_button("Download CSV", csv, "sentiment_results.csv", "text/csv")
 
@@ -326,4 +435,3 @@ if uploaded_file:
         # -------------------------
         with st.expander("🗂 Show All Reviews"):
             st.dataframe(df)
-
