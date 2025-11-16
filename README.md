@@ -33,8 +33,10 @@ The system is designed to be **scalable**, allowing integration of additional e-
 ## Built With
 - **Python** – Backend development  
 - **Streamlit** – Interactive web application  
-- **NLP Libraries** – NLTK, spaCy for text processing and sentiment classification  
-- **Web Scraping** – BeautifulSoup or Scrapy for data collection (if required)  
+- **VADER Sentiment** – Text sentiment scoring  
+- **Altair / Matplotlib** – Visualizations  
+- **Google Translate (googletrans)** – Lightweight multilingual support  
+- **Google Gemini** – Final executive report generation  
 
 ---
 
@@ -49,12 +51,50 @@ The system is designed to be **scalable**, allowing integration of additional e-
    ```bash
    git clone https://github.com/CodesavvySiddharth/SocialPulse.git
    cd SocialPulse
+   ```
 2. Install dependencies:
    ```bash
    pip install -r requirements.txt
-3. Run the application:
+   ```
+3. Configure Gemini API key (choose one):
+   - Option A: Streamlit secrets (`.streamlit/secrets.toml`)
+     ```toml
+     GEMINI_API_KEY = "your_api_key_here"
+     ```
+   - Option B: Environment variable
+     ```bash
+     export GEMINI_API_KEY="your_api_key_here"
+     ```
+4. Run the application:
    ```bash
    streamlit run app.py
-4. Open in your browser at:
+   ```
+5. Open in your browser at:
    ```bash
    http://localhost:8501
+   ```
+
+---
+
+## Usage
+- Upload a CSV file in the “Upload a Review CSV File” section.
+- Explore charts: Sentiment Distribution, Intent & Emotion Summaries, Aspect Breakdown.
+- Review the “Aspect-Based Sentiment Summary (%)” table.
+- Scroll to “Sentiment Analysis — Final Report” and click “Final report generation” to trigger the Gemini-powered executive report.  
+  - The report is displayed on-screen and can be downloaded as a `.txt` file.
+
+### CSV Requirements
+- Required columns:
+  - `Review_Summary` (string): the review text
+  - `Rating` (numeric): the associated rating (e.g., 1–5)
+- Optional/ignored columns are allowed; any `Unnamed: 0` column will be dropped automatically.
+
+### Notes
+- You can toggle “Translate non-English reviews to English” in the sidebar.
+- Category profiles (e.g., Electronics, Fashion) define aspect keywords and display names.
+
+---
+
+## Troubleshooting
+- “Failed to generate report: GEMINI_API_KEY not found”: ensure the key is set via Streamlit secrets or environment variable as shown above.
+- If translation is slow on large files, try disabling translation in the sidebar to speed up processing.
