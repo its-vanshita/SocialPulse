@@ -57,7 +57,12 @@ The system is designed to be **scalable**, allowing integration of additional e-
    pip install -r requirements.txt
    ```
 3. Configure Gemini API key (choose one):
-   - Option A: Streamlit secrets (`.streamlit/secrets.toml`)
+   - Option A (recommended): Streamlit secrets file
+     ```bash
+     cp .streamlit/secrets.example.toml .streamlit/secrets.toml
+     # open .streamlit/secrets.toml and paste your key
+     ```
+     `.streamlit/secrets.toml` content:
      ```toml
      GEMINI_API_KEY = "your_api_key_here"
      ```
@@ -80,7 +85,7 @@ The system is designed to be **scalable**, allowing integration of additional e-
 - Upload a CSV file in the “Upload a Review CSV File” section.
 - Explore charts: Sentiment Distribution, Intent & Emotion Summaries, Aspect Breakdown.
 - Review the “Aspect-Based Sentiment Summary (%)” table.
-- Scroll to “Sentiment Analysis — Final Report” and click “Final report generation” to trigger the Gemini-powered executive report.  
+- Under “AI Analysis & Recommendations”, click “Final report generation” to trigger the Gemini-powered executive report.  
   - The report is displayed on-screen and can be downloaded as a `.txt` file.
 
 ### CSV Requirements
@@ -98,3 +103,21 @@ The system is designed to be **scalable**, allowing integration of additional e-
 ## Troubleshooting
 - “Failed to generate report: GEMINI_API_KEY not found”: ensure the key is set via Streamlit secrets or environment variable as shown above.
 - If translation is slow on large files, try disabling translation in the sidebar to speed up processing.
+
+---
+
+## Collaboration (Team Keys)
+- Do not commit secrets. The repo includes:
+  - `.streamlit/secrets.example.toml` (template)
+  - `.gitignore` ignores `.streamlit/secrets.toml` and `.venv/`
+- Each teammate should:
+  1) Copy the template:
+     ```bash
+     cp .streamlit/secrets.example.toml .streamlit/secrets.toml
+     ```
+  2) Paste their own `GEMINI_API_KEY` into `.streamlit/secrets.toml`
+  3) Run `streamlit run app.py`
+
+### What to Commit
+- Commit: `app.py`, `requirements.txt`, `README.md`, `.gitignore`, `.streamlit/secrets.example.toml`
+- Do not commit: `.streamlit/secrets.toml`, `.venv/`, `__pycache__/`, large datasets (keep samples only)
