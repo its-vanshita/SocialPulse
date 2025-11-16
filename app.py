@@ -3,6 +3,8 @@ import streamlit as st
 import matplotlib.pyplot as plt
 from wordcloud import WordCloud
 import altair as alt
+import os
+import google.generativeai as genai
 
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from langdetect import detect
@@ -159,6 +161,80 @@ def simple_clean(text):
 @st.cache_data
 def convert_df(df):
     return df.to_csv(index=False).encode('utf-8')
+
+# -------------------------
+# Gemini Helpers
+# -------------------------
+def _get_gemini_api_key():
+    try:
+        # Prefer Streamlit secrets if available
+        key = st.secrets.get("GEMINI_API_KEY", None)  # type: ignore[attr-defined]
+    except Exception:
+        key = None
+    return key or os.environ.get("GEMINI_API_KEY")
+
+def generate_final_report_with_gemini(summary_df, reviews_list, category_name: str):
+    api_key = _get_gemini_api_key()
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY not found. Set it in Streamlit secrets or environment.")
+    genai.configure(api_key=api_key)
+    # Limit reviews to a reasonable number to keep prompt size manageable
+    reviews_list = [str(r) for r in reviews_list if isinstance(r, str) or r is not None]
+    if len(reviews_list) > 200:
+        reviews_list = reviews_list[:200]
+    reviews_blob = "\n".join(f"- {r}" for r in reviews_list)
+
+    aspect_table_csv = summary_df.to_csv(index=False)
+
+    prompt = (
+        "You are a senior product insights analyst creating an executive-ready report for a company client.\n"
+        f"Category context: {category_name}\n\n"
+        "Use the aspect-based sentiment table and representative customer reviews below to synthesize a crisp, actionable report.\n"
+        "Focus on business relevance. Avoid repeating raw data. Be concise.\n\n"
+        "Deliverables:\n"
+        "1) Strengths (bulleted)\n"
+        "2) Weaknesses (bulleted)\n"
+        "3) Opportunities (market/product opportunities; bulleted)\n"
+        "4) Risks (bulleted)\n"
+        "5) Recommended Actions (prioritized, with rationale)\n"
+        "6) Top 5 Short Customer Quotes (verbatim, diverse angles)\n"
+        "7) Closing Summary (3-4 lines)\n\n"
+        "Aspect Sentiment Table (CSV):\n"
+        f"{aspect_table_csv}\n\n"
+        "Representative Customer Reviews:\n"
+        f"{reviews_blob}\n\n"
+        "Constraints: Keep it structured with clear headings, no code fences, no markdown tables."
+    )
+
+    # Determine an available model at runtime (prefer latest 1.5 variants)
+    preferred_models = [
+        "gemini-1.5-pro-latest",
+        "gemini-1.5-flash-latest",
+        "gemini-1.5-pro",
+        "gemini-1.5-flash",
+        "gemini-pro",  # legacy text-only fallback
+    ]
+    available_models = []
+    try:
+        for m in genai.list_models():
+            methods = getattr(m, "supported_generation_methods", []) or []
+            if "generateContent" in methods:
+                available_models.append(m.name)
+    except Exception:
+        # If listing fails, we'll rely on preferred set
+        available_models = []
+
+    candidate_models = [m for m in preferred_models if m in available_models] or available_models or preferred_models
+    last_error = None
+    for model_name in candidate_models:
+        try:
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(prompt)
+            return (getattr(response, "text", "") or "").strip()
+        except Exception as e:
+            last_error = e
+            continue
+    raise RuntimeError(f"All Gemini models failed. Last error: {last_error}")
 
 # -------------------------
 # Streamlit UI
@@ -403,24 +479,26 @@ if uploaded_file:
         weakest_aspect = summary_df.sort_values('Negative (%)', ascending=False).iloc[0]
         strongest_aspect = summary_df.sort_values('Positive (%)', ascending=False).iloc[0]
 
-        # Simple AI-like recommendation logic
-        improvement_threshold = 40  # you can adjust this
-        if weakest_aspect['Negative (%)'] > improvement_threshold:
-            suggestion = (f"⚠ *Improvement Needed:* Customers are most dissatisfied with *{weakest_aspect['Aspect']}* "
-                        f"({weakest_aspect['Negative (%)']}% negative sentiment). "
-                        f"Consider addressing issues related to this aspect.")
-        else:
-            suggestion = (f"👍 *Overall Positive:* No single aspect stands out as highly negative. "
-                        f"Continue monitoring for trends.")
-
-        strength = (f"🌟 *Strength:* Customers are happiest with *{strongest_aspect['Aspect']}* "
-                    f"({strongest_aspect['Positive (%)']}% positive sentiment). "
-                    f"Leverage this in your marketing and maintain quality.")
-
-        # Display AI summary
+        # Display AI section with only final report generation
         st.markdown("## 🤖 AI Analysis & Recommendations")
-        st.write(suggestion)
-        st.write(strength)
+        if st.button("Final report generation"):
+            with st.spinner("Generating final report with Gemini..."):
+                try:
+                    reviews_for_llm = df['Review_Summary_English'].dropna().astype(str).tolist()
+                    final_report = generate_final_report_with_gemini(summary_df, reviews_for_llm, selected_profile_name)
+                    st.session_state['final_report_text'] = final_report
+                except Exception as e:
+                    st.error(f"Failed to generate report: {e}")
+        if 'final_report_text' in st.session_state and st.session_state['final_report_text']:
+            st.markdown(st.session_state['final_report_text'])
+            st.download_button(
+                "Download Final Report",
+                st.session_state['final_report_text'],
+                file_name="final_report.txt",
+                mime="text/plain"
+            )
+
+       
 
       
         # -------------------------
