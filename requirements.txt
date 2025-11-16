@@ -9,3 +9,4 @@ googletrans==4.0.0-rc1
 clean-text
 bertopic
 sentence-transformers
+google-generativeai
